@@ -519,7 +519,9 @@ class CausalLM(Model):
                 ds_inference_kwargs["checkpoint"] = checkpoints_json.name
             model = deepspeed.init_inference(model, **ds_inference_kwargs)
             model = model.module
-            model = wrap_in_hpu_graph(remove_kv_cache_from_output(model), disable_tensor_cache=True)
+            model = remove_kv_cache_from_output(model)
+            if self.enable_hpu_graph:
+                model = wrap_in_hpu_graph(model, disable_tensor_cache=True)
 
         else:
             get_repo_root(model_id)
@@ -530,8 +532,9 @@ class CausalLM(Model):
             )
             model = model.eval().to(device)
             #wrap in hpu_graph only if self.enable_hpu_graph is set
+            model = remove_kv_cache_from_output(model)
             if self.enable_hpu_graph:
-                model = wrap_in_hpu_graph(remove_kv_cache_from_output(model), disable_tensor_cache=True)
+                model = wrap_in_hpu_graph(model, disable_tensor_cache=True)
 
         if model.config.model_type in MODELS_OPTIMIZED_WITH_STATIC_SHAPES:
             self.is_optimized_for_gaudi = True
