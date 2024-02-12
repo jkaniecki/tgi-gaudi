@@ -77,21 +77,25 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
                           -1, -2, -4, -8, -16, -32, -64, -128, -256, -512, -1024, -2048]
             #Input and mask shifts
             tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu")
+            htorch.core.mark_step()
             for chunk in chunk_sizes:
                 tensor = torch.roll(tensor, chunk, -1)
                 htorch.core.mark_step()
             for prefill_size in range(prefill_bs):
                 tensor = torch.ones((prefill_size + 1 , max_total_tokens), dtype = self.model.dtype, device = "hpu")
+                htorch.core.mark_step()
                 for chunk in chunk_sizes:
                     tensor = torch.roll(tensor, chunk, -1)
                     htorch.core.mark_step()
             #kv_cache shifts
             for prefill_size in range(prefill_bs):
                 tensor = torch.ones((80, prefill_size + 1 , 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
+                htorch.core.mark_step()
                 for chunk in chunk_sizes:
                     tensor = torch.roll(tensor, chunk, -2)
                     htorch.core.mark_step()
             tensor = torch.ones((80, bs, 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
+            htorch.core.mark_step()
             for chunk in chunk_sizes:
                 tensor = torch.roll(tensor, chunk, -2)
                 htorch.core.mark_step()
