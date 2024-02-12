@@ -4,6 +4,9 @@ import itertools
 import time
 import glob
 
+if os.environ["GRAPH_VISUALIZATION"] in os.environ and int(os.environ["RANK"]) != 0:
+    del os.environ["GRAPH_VISUALIZATION"]
+
 import torch
 
 from dataclasses import dataclass

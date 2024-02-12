@@ -1,4 +1,8 @@
 import math
+import os
+if os.environ["GRAPH_VISUALIZATION"] in os.environ and int(os.environ["RANK"]) != 0:
+    del os.environ["GRAPH_VISUALIZATION"]
+
 import torch
 import habana_frameworks.torch.core as htcore
 
