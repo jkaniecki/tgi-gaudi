@@ -69,27 +69,32 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
     async def Warmup(self, request, context):
         with self.profiler.record_event("external", "warmup"):
             #Warmup perform plenty of shift operations
+            import habana_frameworks.torch as htorch
             max_total_tokens = int(os.environ.get('MAX_TOTAL_TOKENS', 2048))
             prefill_bs = int(os.environ.get('PREFILL_BATCH_SIZE', 2))
             bs = int(os.environ.get('BATCH_BUCKET_SIZE', 128))
             chunk_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
                           -1, -2, -4, -8, -16, -32, -64, -128, -256, -512, -1024, -2048]
             #Input and mask shifts
-            tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu:0")
+            tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu")
             for chunk in chunk_sizes:
                 tensor = torch.roll(tensor, chunk, -1)
+                htorch.core.mark_step()
             for prefill_size in range(prefill_bs):
-                tensor = torch.ones(((prefill_size + 1), max_total_tokens), dtype = self.model.dtype, device = "hpu:0")
+                tensor = torch.ones((prefill_size + 1 , max_total_tokens), dtype = self.model.dtype, device = "hpu")
                 for chunk in chunk_sizes:
                     tensor = torch.roll(tensor, chunk, -1)
+                    htorch.core.mark_step()
             #kv_cache shifts
             for prefill_size in range(prefill_bs):
-                tensor = torch.ones((80, (prefill_size + 1), 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu:0")
+                tensor = torch.ones((80, prefill_size + 1 , 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
                 for chunk in chunk_sizes:
                     tensor = torch.roll(tensor, chunk, -2)
-            tensor = torch.ones((80, bs, 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu:0")
+                    htorch.core.mark_step()
+            tensor = torch.ones((80, bs, 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
             for chunk in chunk_sizes:
                 tensor = torch.roll(tensor, chunk, -2)
+                htorch.core.mark_step()
             return generate_pb2.WarmupResponse()
 
     async def Prefill(self, request, context):
