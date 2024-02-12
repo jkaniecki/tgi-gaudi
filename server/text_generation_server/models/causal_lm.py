@@ -85,6 +85,7 @@ def prepare_memory(new_bs, tensor, inplace):
 
 
 def move_data(dst_tensor, chunk_size, indices, src_tensors):
+    dbg_trace('MOVE_DATA', f'shape:{list(dst_tensor.shape)} chunk_size:{chunk_size}')
     batch_dim = 0
     bs = dst_tensor.size(batch_dim)
     assert bs % chunk_size == 0, 'Batch dim must be divisible by chunk size!'
@@ -156,6 +157,7 @@ def remove_kv_cache_from_output(module):
 
 
 def pad_tensors(tensors, paddings, dim, value):
+    dbg_trace('PAD_TENSORS', f'shapes:{[list(tensor.shape) for tensor in tensors]} pads:{paddings} dim:{dim}')
     for i, (tensor, padding) in enumerate(zip(tensors, paddings)):
         if padding > 0:
             pad_shape = (0, 0, 0, padding) if dim == -2 else (0, padding)
@@ -318,21 +320,23 @@ class CausalLMBatch(Batch):
         src_values = [[b.past_key_values[layer_num][1] for layer_num in range(num_layers)] for b in batches]
         for b in batches:
             del b.past_key_values
-
+        dbg_trace('STACK_KEYS', f'')
         src_keys = [torch.stack(src) for src in src_keys]
         htorch.core.mark_step()
         src_keys = pad_tensors(src_keys, extra_padding, key_dim, 0)
         src_keys = shift_all(src_keys, key_dim, offsets)
+        dbg_trace('SQUEEZE_KEYS', f'')
         src_keys = [[t.squeeze(0).clone() for t in torch.split(src, 1)] for src in src_keys]
         htorch.core.mark_step()
 
         dst_keys = [prepare_memory(new_bs * chunk_size, prev, inplace) for prev in src_keys[target_batch_idx]]
         dst_keys = [move_data(dst_keys[layer_num], chunk_size, indices, [src[layer_num] for src in src_keys]) for layer_num in range(num_layers)]
-
+        dbg_trace('STACK_VALUES', f'')
         src_values = [torch.stack(src) for src in src_values]
         htorch.core.mark_step()
         src_values = pad_tensors(src_values, extra_padding, value_dim, 0)
         src_values = shift_all(src_values, value_dim, offsets)
+        dbg_trace('SQUEEZE_VALUES', f'')
         src_values = [[t.squeeze(0).clone() for t in torch.split(src, 1)] for src in src_values]
         htorch.core.mark_step()
 
