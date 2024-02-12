@@ -72,8 +72,8 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
             max_total_tokens = int(os.environ.get('MAX_TOTAL_TOKENS', 2048))
             prefill_bs = int(os.environ.get('PREFILL_BATCH_SIZE', 2))
             bs = int(os.environ.get('BATCH_BUCKET_SIZE', 128))
-            chunk_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-            chunk_sizes.extend(-1 * chunk_sizes)
+            chunk_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+                          -1, -2, -4, -8, -16, -32, -64, -128, -256, -512, -1024, -2048]
             #Input and mask shifts
             tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu:0")
             for chunk in chunk_sizes:
