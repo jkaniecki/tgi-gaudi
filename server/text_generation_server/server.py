@@ -68,15 +68,28 @@ class TextGenerationService(generate_pb2_grpc.TextGenerationServiceServicer):
 
     async def Warmup(self, request, context):
         with self.profiler.record_event("external", "warmup"):
-            # batch = self.model.batch_type.from_pb(
-            #     request.batch, self.model.tokenizer, self.model.dtype, self.model.device
-            # )
-            # max_supported_total_tokens = self.model.warmup(batch)
-
-            # return generate_pb2.WarmupResponse(
-            #     max_supported_total_tokens=max_supported_total_tokens
-            # )
-            logger.warning("Warmup is not enabled on HPU.")
+            #Warmup perform plenty of shift operations
+            max_total_tokens = int(os.environ.get('MAX_TOTAL_TOKENS', 2048))
+            prefill_bs = int(os.environ.get('PREFILL_BATCH_SIZE', 2))
+            bs = int(os.environ.get('BATCH_BUCKET_SIZE', 128))
+            chunk_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+            chunk_sizes.extend(-1 * chunk_sizes)
+            #Input and mask shifts
+            tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu:0")
+            for chunk in chunk_sizes:
+                tensor = torch.roll(tensor, chunk, -1)
+            for prefill_size in range(prefill_bs):
+                tensor = torch.ones(((prefill_size + 1), max_total_tokens), dtype = self.model.dtype, device = "hpu:0")
+                for chunk in chunk_sizes:
+                    tensor = torch.roll(tensor, chunk, -1)
+            #kv_cache shifts
+            for prefill_size in range(prefill_bs):
+                tensor = torch.ones((80, (prefill_size + 1), 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu:0")
+                for chunk in chunk_sizes:
+                    tensor = torch.roll(tensor, chunk, -2)
+            tensor = torch.ones((80, bs, 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu:0")
+            for chunk in chunk_sizes:
+                tensor = torch.roll(tensor, chunk, -2)
             return generate_pb2.WarmupResponse()
 
     async def Prefill(self, request, context):
