@@ -641,6 +641,7 @@ class CausalLM(Model):
             self.hb_profer = None
             self.hb_profer_started = False
         self.step = 0
+        self._shifting_warmup_done = False
 
     def setup_quantization(self, model):
         if hq_env.is_quantization_enabled:
@@ -961,3 +962,47 @@ class CausalLM(Model):
             self.hb_profer_started = False
 
         return generations, batch if not stopped else None
+    
+    def warmup(self, batch: CausalLMBatch):
+        self.shifting_warmup()
+        # prefill
+        _, batch = self.generate_token([batch])
+        # decodes
+        while batch is not None:
+            _, batch = self.generate_token([batch])
+
+
+    def shifting_warmup(self):
+        if self._shifting_warmup_done:
+            return
+        max_total_tokens = int(os.environ.get('MAX_TOTAL_TOKENS', 2048))
+        prefill_bs = int(os.environ.get('PREFILL_BATCH_SIZE', 2))
+        bs = int(os.environ.get('BATCH_BUCKET_SIZE', 128))
+        chunk_sizes = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048,
+                        -1, -2, -4, -8, -16, -32, -64, -128, -256, -512, -1024, -2048]
+        #Input and mask shifts
+        tensor = torch.ones((bs, max_total_tokens), dtype = self.model.dtype, device = "hpu")
+        htorch.core.mark_step()
+        for chunk in chunk_sizes:
+            tensor = torch.roll(tensor, chunk, -1)
+            htorch.core.mark_step()
+        for prefill_size in range(prefill_bs):
+            tensor = torch.ones((prefill_size + 1 , max_total_tokens), dtype = self.model.dtype, device = "hpu")
+            htorch.core.mark_step()
+            for chunk in chunk_sizes:
+                tensor = torch.roll(tensor, chunk, -1)
+                htorch.core.mark_step()
+        #kv_cache shifts
+        for prefill_size in range(prefill_bs):
+            tensor = torch.ones((80, prefill_size + 1 , 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
+            htorch.core.mark_step()
+            for chunk in chunk_sizes:
+                tensor = torch.roll(tensor, chunk, -2)
+                htorch.core.mark_step()
+        tensor = torch.ones((80, bs, 1, max_total_tokens, 128), dtype = self.model.dtype, device = "hpu")
+        htorch.core.mark_step()
+        for chunk in chunk_sizes:
+            tensor = torch.roll(tensor, chunk, -2)
+            htorch.core.mark_step()
+        self._shifting_warmup_done = True
+        return
