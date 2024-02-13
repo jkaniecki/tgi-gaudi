@@ -85,7 +85,6 @@ def prepare_memory(new_bs, tensor, inplace):
 
 
 def move_data(dst_tensor, chunk_size, indices, src_tensors):
-    dbg_trace('MOVE_DATA', f'shape:{list(dst_tensor.shape)} chunk_size:{chunk_size}')
     batch_dim = 0
     bs = dst_tensor.size(batch_dim)
     assert bs % chunk_size == 0, 'Batch dim must be divisible by chunk size!'
@@ -320,23 +319,19 @@ class CausalLMBatch(Batch):
         src_values = [[b.past_key_values[layer_num][1] for layer_num in range(num_layers)] for b in batches]
         for b in batches:
             del b.past_key_values
-        dbg_trace('STACK_KEYS', f'')
         src_keys = [torch.stack(src) for src in src_keys]
         htorch.core.mark_step()
         src_keys = pad_tensors(src_keys, extra_padding, key_dim, 0)
         src_keys = shift_all(src_keys, key_dim, offsets)
-        dbg_trace('SQUEEZE_KEYS', f'')
         src_keys = [[t.squeeze(0).clone() for t in torch.split(src, 1)] for src in src_keys]
         htorch.core.mark_step()
 
         dst_keys = [prepare_memory(new_bs * chunk_size, prev, inplace) for prev in src_keys[target_batch_idx]]
         dst_keys = [move_data(dst_keys[layer_num], chunk_size, indices, [src[layer_num] for src in src_keys]) for layer_num in range(num_layers)]
-        dbg_trace('STACK_VALUES', f'')
         src_values = [torch.stack(src) for src in src_values]
         htorch.core.mark_step()
         src_values = pad_tensors(src_values, extra_padding, value_dim, 0)
         src_values = shift_all(src_values, value_dim, offsets)
-        dbg_trace('SQUEEZE_VALUES', f'')
         src_values = [[t.squeeze(0).clone() for t in torch.split(src, 1)] for src in src_values]
         htorch.core.mark_step()
 
@@ -860,14 +855,14 @@ class CausalLM(Model):
             )
 
         htorch.core.mark_step()
-
+        dbg_trace('AFTER_FORWARD', '')
         # Stage 3. Finish and return previous generations
         stopped = len(requests_to_generate) > 0
         for prev_batch in prev_batches:
             prev_batch['next_token_logprobs'] = prev_batch['next_token_logprobs'].tolist()
             prev_batch['next_token_ids_cpu'] = prev_batch['next_token_ids'].cpu()
         htorch.core.mark_step()
-
+        dbg_trace('AFTER_PREV_GEN', '')
         for req_data in requests_to_generate:
             req = req_data['req']
             i = req_data['prev_req_idx']
@@ -959,7 +954,7 @@ class CausalLM(Model):
             req.prefix_offset = prefix_offset
             req.read_offset = read_offset
             htorch.core.mark_step()
-
+        dbg_trace('AFTER_GEN', '')
         self.step = self.step + 1
         if self.hb_profer_started == True and self.step > self.profiling_warmup_steps + self.profiling_steps:
             self.hb_profer.stop()
