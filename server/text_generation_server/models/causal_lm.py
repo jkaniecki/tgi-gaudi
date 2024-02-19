@@ -186,20 +186,41 @@ def grouped_extend_batch(tensor_groups, target_bs, bs_dims):
 
 def remove_kv_cache_from_output(module):
     orig_fwd = module.forward
+    is_optimized_for_gaudi = False
+    if module.config.model_type in MODELS_OPTIMIZED_WITH_STATIC_SHAPES:
+        is_optimized_for_gaudi = True
 
     @wraps(orig_fwd)
     def forward(*args, **kwargs):
         if kwargs["past_key_values"] is not None:
             kwargs["return_dict"] = False
+            input_length = kwargs["input_len"]
+            kwargs.pop("input_len", None)
             output = orig_fwd(*args, **kwargs)
             first_value, second_value, *_ = output
             if first_value.nelement() < 2:
+                if is_optimized_for_gaudi and second_value.shape[-2] > 1:
+                    next_token_ids = second_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+                else:
+                    next_token_ids = second_value.squeeze(-2).argmax(dim=-1)
                 return second_value
             else:
+                if is_optimized_for_gaudi and first_value.shape[-2] > 1:
+                    next_token_ids = first_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+                else:
+                    next_token_ids = first_value.squeeze(-2).argmax(dim=-1)
                 return first_value
         else:
             kwargs["return_dict"] = True
-            return orig_fwd(*args, **kwargs)
+            input_length = kwargs["input_len"]
+            kwargs.pop("input_len", None)
+            output = orig_fwd(*args, **kwargs)
+            logits = output.logits
+            if is_optimized_for_gaudi and logits.shape[-2] > 1:
+                next_token_ids = logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+            else:
+                next_token_ids = logits.squeeze(-2).argmax(dim=-1)
+            return output.logits, output.past_key_values
 
     module.forward = forward
     return module
@@ -774,6 +795,7 @@ class CausalLM(Model):
         input_ids,
         attention_mask,
         position_ids,
+        input_len,
         token_idx: Optional = None,
         past_key_values: Optional = None,
         bypass_hpu_graph: Optional = None,
@@ -783,6 +805,7 @@ class CausalLM(Model):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
+            "input_len": input_len,
         }
 
         if self.is_optimized_for_gaudi:
@@ -798,8 +821,7 @@ class CausalLM(Model):
         if past_key_values is not None:
             return self.model.forward(**kwargs)
         else:
-            outputs = self.model.forward(**kwargs)
-            return outputs.logits, outputs.past_key_values
+            return self.model.forward(**kwargs)
 
     @tracer.start_as_current_span("generate_token")
     def generate_token(self, batches: List[CausalLMBatch]) -> Tuple[List[Generation], Optional[CausalLMBatch]]:
@@ -917,6 +939,7 @@ class CausalLM(Model):
                 input_ids,
                 attention_mask,
                 batch.position_ids,
+                batch.input_length,
                 token_idx,
                 batch.past_key_values,
                 bypass_hpu_graph=prefill and self.limit_hpu_graph if self.enable_hpu_graph else None
@@ -926,6 +949,7 @@ class CausalLM(Model):
                 input_ids,
                 attention_mask,
                 batch.position_ids,
+                batch.input_length,
                 token_idx,
                 batch.past_key_values,
                 bypass_hpu_graph=prefill and self.limit_hpu_graph if self.enable_hpu_graph else None
