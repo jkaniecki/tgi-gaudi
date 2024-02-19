@@ -146,25 +146,25 @@ def remove_kv_cache_from_output(module):
             output = orig_fwd(*args, **kwargs)
             first_value, second_value, *_ = output
             if first_value.nelement() < 2:
-                logits = second_value
+                if is_optimized_for_gaudi and second_value.shape[-2] > 1:
+                    return second_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+                else:
+                    return second_value.squeeze(-2).argmax(dim=-1)
             else:
-                logits = first_value
-            if is_optimized_for_gaudi and logits.shape[-2] > 1:
-                next_token_ids = logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
-            else:
-                next_token_ids = logits.squeeze(-2).argmax(dim=-1)
-            return next_token_ids
+                if is_optimized_for_gaudi and first_value.shape[-2] > 1:
+                    return first_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+                else:
+                    return first_value.squeeze(-2).argmax(dim=-1)
+
         else:
             kwargs["return_dict"] = True
             input_length = kwargs["input_len"]
             kwargs.pop("input_len", None)
             output = orig_fwd(*args, **kwargs)
-            logits = output.logits
-            if is_optimized_for_gaudi and logits.shape[-2] > 1:
-                next_token_ids = logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+            if is_optimized_for_gaudi and output.logits.shape[-2] > 1:
+                return output.logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1), output.past_key_values
             else:
-                next_token_ids = logits.squeeze(-2).argmax(dim=-1)
-            return next_token_ids, output.past_key_values
+                return output.logits.squeeze(-2).argmax(dim=-1), output.past_key_values
 
     module.forward = forward
     return module
@@ -756,7 +756,6 @@ class CausalLM(Model):
         # Stage 1. Collect next token ids of any previously started generations
         for batch_id, batch in enumerate(batches):
             if batch.next_token_ids is not None:
-                next_token_ids = batch.next_token_ids
                 past = batch.past
                 prefill = batch.past_key_values is None
                 if self.is_optimized_for_gaudi:
