@@ -827,17 +827,16 @@ class CausalLM(Model):
                 # Select next token
                 input_length = batch.input_length
                 if self.is_optimized_for_gaudi and logits.shape[-2] > 1:
-                    next_token_ids, next_token_logprobs, _ = batch.next_token_chooser(
+                    next_token_ids, _, _ = batch.next_token_chooser(
                         batch.input_ids[:, :token_idx], logits[:, input_length - 1: input_length, :].squeeze(-2)
                     )
                 else:
-                    next_token_ids, next_token_logprobs, _ = batch.next_token_chooser(
+                    next_token_ids, _, _ = batch.next_token_chooser(
                         batch.input_ids[:, :token_idx], logits.squeeze(-2)
                     )
 
                 prev_batches.append({
-                    'next_token_ids': next_token_ids,
-                    'next_token_logprobs': next_token_logprobs,
+                    'next_token_ids': next_token_ids
                 })
 
                 for req_idx, req in enumerate(batch.requests):
@@ -937,7 +936,6 @@ class CausalLM(Model):
         # Stage 3. Finish and return previous generations
         stopped = len(requests_to_generate) > 0
         for prev_batch in prev_batches:
-            prev_batch['next_token_logprobs'] = prev_batch['next_token_logprobs'].tolist()
             prev_batch['next_token_ids_cpu'] = prev_batch['next_token_ids'].cpu()
         htorch.core.mark_step()
 
@@ -947,7 +945,6 @@ class CausalLM(Model):
             prev_batch_id = req_data['batch_id']
             assert len(prev_batches) > prev_batch_id
             next_token_ids_cpu = prev_batches[prev_batch_id]['next_token_ids_cpu']
-            next_token_logprobs = prev_batches[prev_batch_id]['next_token_logprobs']
 
             request = req.data
             input_length = req.input_length
@@ -958,7 +955,6 @@ class CausalLM(Model):
             stopping_criteria = req.stopping_criteria
             all_input_ids = req.all_input_ids
             next_token_id = next_token_ids_cpu[i]
-            next_token_logprob = next_token_logprobs[i]
 
             # Append next token to all tokens
             if self.is_optimized_for_gaudi:
@@ -999,18 +995,8 @@ class CausalLM(Model):
                     generated_text = None
 
                 # Prefill
-                if stopping_criteria.current_tokens == 1 and request.prefill_logprobs:
-                    # Remove generated token to only have prefill and add nan for first prompt token
-                    prefill_logprobs = [float("nan")] + next_token_logprobs
-                    prefill_token_ids = all_input_ids[0: new_input_length - 1]
-                    prefill_texts = self.tokenizer.batch_decode(
-                        prefill_token_ids,
-                        clean_up_tokenization_spaces=False,
-                        skip_special_tokens=False,
-                    )
-                    prefill_tokens = PrefillTokens(prefill_token_ids, prefill_logprobs, prefill_texts)
-                else:
-                    prefill_tokens = None
+                assert request.prefill_logprobs==False
+                prefill_tokens = None
 
                 top_tokens = None
 
@@ -1018,7 +1004,7 @@ class CausalLM(Model):
                     request.id,
                     prefill_tokens,
                     next_token_id,
-                    next_token_logprob,
+                    None,
                     next_token_text,
                     next_token_id in self.all_special_ids,
                     generated_text,
