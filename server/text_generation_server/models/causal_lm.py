@@ -203,24 +203,23 @@ def remove_kv_cache_from_output(module):
                     next_token_ids = second_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
                 else:
                     next_token_ids = second_value.squeeze(-2).argmax(dim=-1)
-                return second_value
+                return next_token_ids
             else:
                 if is_optimized_for_gaudi and first_value.shape[-2] > 1:
                     next_token_ids = first_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
                 else:
                     next_token_ids = first_value.squeeze(-2).argmax(dim=-1)
-                return first_value
+                return next_token_ids
         else:
             kwargs["return_dict"] = True
             input_length = kwargs["input_len"]
             kwargs.pop("input_len", None)
             output = orig_fwd(*args, **kwargs)
-            logits = output.logits
-            if is_optimized_for_gaudi and logits.shape[-2] > 1:
-                next_token_ids = logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
+            if is_optimized_for_gaudi and output.logits.shape[-2] > 1:
+                next_token_ids = output.logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
             else:
-                next_token_ids = logits.squeeze(-2).argmax(dim=-1)
-            return output.logits, output.past_key_values
+                next_token_ids = output.logits.squeeze(-2).argmax(dim=-1)
+            return next_token_ids, output.past_key_values
 
     module.forward = forward
     return module
@@ -280,7 +279,7 @@ class CausalLMBatch(Batch):
 
     input_length: int
 
-    logits = None
+    next_token_ids = None
     past = None
 
     def to_pb(self) -> generate_pb2.CachedBatch:
@@ -833,8 +832,8 @@ class CausalLM(Model):
         # In order to pipeline any actions on CPU we perform the operation in 3 main stages:
         # Stage 1. Collect next token ids of any previously started generations
         for batch_id, batch in enumerate(batches):
-            if batch.logits is not None:
-                logits = batch.logits
+            if batch.next_token_ids is not None:
+                next_token_ids = batch.next_token_ids
                 past = batch.past
                 prefill = batch.past_key_values is None
                 if self.is_optimized_for_gaudi:
@@ -847,15 +846,6 @@ class CausalLM(Model):
                     token_idx = None
 
                 # Select next token
-                input_length = batch.input_length
-                if self.is_optimized_for_gaudi and logits.shape[-2] > 1:
-                    next_token_ids, _, _ = batch.next_token_chooser(
-                        batch.input_ids[:, :token_idx], logits[:, input_length - 1: input_length, :].squeeze(-2)
-                    )
-                else:
-                    next_token_ids, _, _ = batch.next_token_chooser(
-                        batch.input_ids[:, :token_idx], logits.squeeze(-2)
-                    )
 
                 prev_batches.append({
                     'next_token_ids': next_token_ids
@@ -935,7 +925,7 @@ class CausalLM(Model):
             input_ids = batch.input_ids
 
         if prefill:
-            batch.logits, batch.past = self.forward(
+            batch.next_token_ids, batch.past = self.forward(
                 input_ids,
                 attention_mask,
                 batch.position_ids,
@@ -945,7 +935,7 @@ class CausalLM(Model):
                 bypass_hpu_graph=prefill and self.limit_hpu_graph if self.enable_hpu_graph else None
             )
         else:
-            batch.logits = self.forward(
+            batch.next_token_ids = self.forward(
                 input_ids,
                 attention_mask,
                 batch.position_ids,
