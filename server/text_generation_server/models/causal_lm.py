@@ -192,33 +192,17 @@ def remove_kv_cache_from_output(module):
 
     @wraps(orig_fwd)
     def forward(*args, **kwargs):
-        if kwargs["past_key_values"] is not None:
-            kwargs["return_dict"] = False
-            input_length = kwargs["input_len"]
-            kwargs.pop("input_len", None)
-            output = orig_fwd(*args, **kwargs)
-            first_value, second_value, *_ = output
-            if first_value.nelement() < 2:
-                if is_optimized_for_gaudi and second_value.shape[-2] > 1:
-                    next_token_ids = second_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
-                else:
-                    next_token_ids = second_value.squeeze(-2).argmax(dim=-1)
-                return next_token_ids
-            else:
-                if is_optimized_for_gaudi and first_value.shape[-2] > 1:
-                    next_token_ids = first_value[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
-                else:
-                    next_token_ids = first_value.squeeze(-2).argmax(dim=-1)
-                return next_token_ids
+        kwargs["return_dict"] = True
+        input_length = kwargs["input_len"]
+        kwargs.pop("input_len", None)
+        output = orig_fwd(*args, **kwargs)
+        if is_optimized_for_gaudi and output.logits.shape[-2] > 1:
+            next_token_ids = output.logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
         else:
-            kwargs["return_dict"] = True
-            input_length = kwargs["input_len"]
-            kwargs.pop("input_len", None)
-            output = orig_fwd(*args, **kwargs)
-            if is_optimized_for_gaudi and output.logits.shape[-2] > 1:
-                next_token_ids = output.logits[:, input_length - 1: input_length, :].squeeze(-2).argmax(dim=-1)
-            else:
-                next_token_ids = output.logits.squeeze(-2).argmax(dim=-1)
+            next_token_ids = output.logits.squeeze(-2).argmax(dim=-1)
+        if kwargs["past_key_values"] is not None:
+            return next_token_ids
+        else:
             return next_token_ids, output.past_key_values
 
     module.forward = forward
@@ -817,10 +801,7 @@ class CausalLM(Model):
             kwargs["bypass_hpu_graphs"] = bypass_hpu_graph
 
         kwargs.update(self.kwargs)
-        if past_key_values is not None:
-            return self.model.forward(**kwargs)
-        else:
-            return self.model.forward(**kwargs)
+        return self.model.forward(**kwargs)
 
     @tracer.start_as_current_span("generate_token")
     def generate_token(self, batches: List[CausalLMBatch]) -> Tuple[List[Generation], Optional[CausalLMBatch]]:
