@@ -942,12 +942,9 @@ class CausalLM(Model):
             new_input_length = input_length + 1
 
             # Generated token
-            if is_tokenizer_transparent(self.tokenizer) and len(stopping_criteria.stop_sequence_criterias) == 0:
-                next_token_text = ''
-            else:
-                next_token_text, prefix_offset, read_offset = self.decode_token(
-                    all_input_ids[0:new_input_length, 0], prefix_offset, read_offset
-                )
+            next_token_text, prefix_offset, read_offset = self.decode_token(
+                all_input_ids[0:new_input_length, 0], prefix_offset, read_offset
+            )
 
             # Evaluate stopping criteria
             stop, reason = stopping_criteria(
@@ -963,12 +960,9 @@ class CausalLM(Model):
             if i % self.world_size == self.rank:
                 if stop:
                     # Decode generated tokens
-                    if is_tokenizer_transparent(self.tokenizer):
-                        output_text = None
-                    else:
-                        output_text = self.decode(
-                            all_input_ids[new_input_length - stopping_criteria.current_tokens: new_input_length, 0]
-                        )
+                    output_text = self.decode(
+                        all_input_ids[new_input_length - stopping_criteria.current_tokens: new_input_length, 0]
+                    )
                     generated_text = GeneratedText(
                         output_text,
                         stopping_criteria.current_tokens,
@@ -1025,8 +1019,7 @@ class CausalLM(Model):
             req.input_length = new_input_length
             req.prefix_offset = prefix_offset
             req.read_offset = read_offset
-
-        htorch.core.mark_step()
+            htorch.core.mark_step()
         self.step = self.step + 1
         if self.hb_profiler is not None:
             if self.step > self.profiling_wait_steps + self.profiling_warmup_steps + self.profiling_steps:
