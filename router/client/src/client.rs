@@ -144,13 +144,19 @@ impl Client {
             let _response = self.stub.warmup(request).await?.into_inner();
         }
 
-        //Send 2 batches with deaful params to warm up Greedy search
-        let batches: Vec<Batch> = vec![
-                self.create_warmup_batch(shapes[0], &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, true),
-                self.create_warmup_batch(shapes[0], &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, true)
-        ];
-        let request = tonic::Request::new(WarmupRequest { batches }).inject_context();
-        let _response = self.stub.warmup(request).await?.into_inner();
+        //Send batches with deafult params to warm up Greedy search
+        let mut greedy_shapes: Vec<(u32, u32)> = Vec::with_capacity(batch_sizes.len());
+        for batch_size in &batch_sizes {
+            greedy_shapes.push((*batch_size, seq_bucket_size.clone()));
+        }
+        for greedy_shape in greedy_shapes.iter() {
+            let batches: Vec<Batch> = vec![
+                self.create_warmup_batch(*greedy_shape, &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, true),
+                self.create_warmup_batch(*greedy_shape, &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, true),
+            ];
+            let request = tonic::Request::new(WarmupRequest { batches }).inject_context();
+            let _response = self.stub.warmup(request).await?.into_inner();
+        }
         Ok(None) // No support for maximum total tokens
     }
 
