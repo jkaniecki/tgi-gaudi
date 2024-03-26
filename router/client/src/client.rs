@@ -152,7 +152,6 @@ impl Client {
         };
         for shape in shapes.iter() {
             // create two batches in order to trigger concatenate operation
-            // in case decode bs=1 create one batch
             let batches: Vec<Batch> = vec![self.create_warmup_batch(
                 *shape, &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, false); 
                 num_batches
