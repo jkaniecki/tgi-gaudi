@@ -250,14 +250,21 @@ impl Client {
             // generate random tokens
             let mut rng = rand::thread_rng();
             let range = Uniform::new(2, 8192);
-            let tokens = input_length - seq_bucket_size / 2;
+            let tokens = if input_length % seq_bucket_size == 0 {
+                input_length - seq_bucket_size / 2
+            } else {
+                input_length - (input_length % seq_bucket_size) / 2
+            };
             (0..tokens)
                 .map(|_| rng.sample(&range).to_string())
                 .collect::<Vec<String>>()
                 .join(", ")
         } else {
             // repeat test string to get expected input shape
-            let bucket_id = input_length / seq_bucket_size;
+            let mut bucket_id = input_length / seq_bucket_size;
+            if input_length % seq_bucket_size != 0 {
+                bucket_id += 1
+            }
             let repeats = cmp::max(1, (bucket_id - 1) * seq_bucket_size / 2);
             "_test ".to_string().repeat(repeats as usize)
         }
