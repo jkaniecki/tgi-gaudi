@@ -143,19 +143,27 @@ impl Client {
         let num_batches = match max_batch_total_tokens {
             Some(val) => {
                 if val == max_total_tokens {
-                1
+                    1
                 } else {
-                2
+                    2
                 }
             }
             None => 2, // If max_batch_total_tokens is None, create two batches
         };
         for shape in shapes.iter() {
             // create two batches in order to trigger concatenate operation
-            let batches: Vec<Batch> = vec![self.create_warmup_batch(
-                *shape, &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, false); 
+            // in case decode bs=1 create one batch
+            let batches: Vec<Batch> = vec![
+                self.create_warmup_batch(
+                    *shape,
+                    &mut id_counter,
+                    max_input_length,
+                    max_total_tokens,
+                    seq_bucket_size,
+                    false,
+                );
                 num_batches
-                ];
+            ];
             let request = tonic::Request::new(WarmupRequest { batches }).inject_context();
             let _response = self.stub.warmup(request).await?.into_inner();
         }
@@ -166,10 +174,17 @@ impl Client {
             greedy_shapes.push((*batch_size, seq_bucket_size.clone()));
         }
         for greedy_shape in greedy_shapes.iter() {
-            let batches: Vec<Batch> = vec![self.create_warmup_batch(
-                *greedy_shape, &mut id_counter, max_input_length, max_total_tokens, seq_bucket_size, true); 
+            let batches: Vec<Batch> = vec![
+                self.create_warmup_batch(
+                    *greedy_shape,
+                    &mut id_counter,
+                    max_input_length,
+                    max_total_tokens,
+                    seq_bucket_size,
+                    true,
+                );
                 num_batches
-                ];
+            ];
             let request = tonic::Request::new(WarmupRequest { batches }).inject_context();
             let _response = self.stub.warmup(request).await?.into_inner();
         }
