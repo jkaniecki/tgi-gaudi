@@ -20,6 +20,7 @@ limitations under the License.
 
 - [Running TGI on Gaudi](#running-tgi-on-gaudi)
 - [Adjusting TGI parameters](#adjusting-tgi-parameters)
+- [Running TGI with fp8 precision](#running-tgi-with-fp8-precision)
 - [Currently supported configurations](#currently-supported-configurations)
 - [Environment variables](#environment-variables)
 - [Profiler](#profiler)
@@ -91,6 +92,21 @@ Except those already mentioned, there are other parameters that need to be prope
 
 For more information and documentation about Text Generation Inference, checkout [the README](https://github.com/huggingface/text-generation-inference#text-generation-inference) of the original repo.
 
+## Running TGI with fp8 precision
+
+TGI supports fp8 precision runs within the limits provided by [Habana Quantization Toolkit](https://docs.habana.ai/en/latest/PyTorch/Inference_on_PyTorch/Inference_Using_FP8.html). Models with fp8 can be ran by properly setting QUANT_CONFIG environment variable. Deatiled instruction on how to use that variable can be found in [Optimum Habana fp8 guide](https://github.com/huggingface/optimum-habana/tree/main/examples/text-generation#running-with-fp8). Summarising that instruction in TGI cases:
+
+1. Measure quantization statistics of requested model by using [Optimum Habana measurement script](https://github.com/huggingface/optimum-habana/tree/main/examples/text-generation#running-with-fp8:~:text=use_deepspeed%20%2D%2Dworld_size%208-,run_lm_eval.py,-%5C%0A%2Do%20acc_70b_bs1_measure.txt)
+2. Run requested model in TGI with proper QUANT_CONFIG setting - f. e. `QUANT_CONFIG=./quantization_config/maxabs_quant.json`
+
+> [!NOTE]
+> Only models pointed in [supported configurations](#currently-supported-configurations) are guaranteed to work with fp8
+
+Additional hints to quantize model for TGI when using `run_lm_eval.py`:
+* use `--limit_hpu_graphs` flag to save memory
+* try to model Your use case situation by adjusting `--batch_size` , `--max_new_tokens 512` and `--max_input_tokens 512` In case of memory issues, lower those values.
+* use dataset/tasks suitable for Your use case (see `--help` for )
+ 
 ## Currently supported configurations
 
 Not all features of TGI are currently supported as this is still a work in progress.
