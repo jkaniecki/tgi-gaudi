@@ -110,20 +110,15 @@ Additional hints to quantize model for TGI when using `run_lm_eval.py`:
 ## Currently supported configurations
 
 Not all features of TGI are currently supported as this is still a work in progress.
-Currently supported and validated configurations (other configurations are not guaranted to work or ensure reasonable performance ):
-* LLaMA 70b:
-    * Num cards: 8
-    * Decode batch size: 128
-    * Dtype: bfloat16
-    * Max input tokens: 1024
-    * Max total tokens: 2048
+Currently supported and validated configurations (other configurations are not guaranted to work or ensure reasonable performance):
 
-* LLaMA 7b:
-    * Num cards: 1
-    * Decode batch size: 16
-    * Dtype: bfloat16
-    * Max input tokens: 1024
-    * Max total tokens: 2048
+<div align="left">
+
+| Model| Cards| Decode batch size| Dtype| Max input tokens |Max total tokens|
+|:----:|:----:|:----------------:|:----:|:----------------:|:--------------:|
+| LLaMA 70b | 8     | 128 | bfloat16/fp8 | 1024 | 2048 |
+| LLaMA 7b  | 1/8   | 16  | bfloat16/fp8 | 1024 | 2048 |
+</div>
 
 Other sequence lengths can be used with proportionally decreased/increased batch size (the higher sequence length, the lower batch size).
 Support for other models from Optimum Habana will be added successively.
