@@ -20,7 +20,7 @@ limitations under the License.
 
 - [Running TGI on Gaudi](#running-tgi-on-gaudi)
 - [Adjusting TGI parameters](#adjusting-tgi-parameters)
-- [Running TGI with fp8 precision](#running-tgi-with-fp8-precision)
+- [Running TGI with FP8 precision](#running-tgi-with-fp8-precision)
 - [Currently supported configurations](#currently-supported-configurations)
 - [Environment variables](#environment-variables)
 - [Profiler](#profiler)
@@ -92,15 +92,15 @@ Except those already mentioned, there are other parameters that need to be prope
 
 For more information and documentation about Text Generation Inference, checkout [the README](https://github.com/huggingface/text-generation-inference#text-generation-inference) of the original repo.
 
-## Running TGI with fp8 precision
+## Running TGI with FP8 precision
 
-TGI supports fp8 precision runs within the limits provided by [Habana Quantization Toolkit](https://docs.habana.ai/en/latest/PyTorch/Inference_on_PyTorch/Inference_Using_FP8.html). Models with fp8 can be ran by properly setting QUANT_CONFIG environment variable. Deatiled instruction on how to use that variable can be found in [Optimum Habana fp8 guide](https://github.com/huggingface/optimum-habana/tree/main/examples/text-generation#running-with-fp8). Summarising that instruction in TGI cases:
+TGI supports FP8 precision runs within the limits provided by [Habana Quantization Toolkit](https://docs.habana.ai/en/latest/PyTorch/Inference_on_PyTorch/Inference_Using_FP8.html). Models with FP8 can be ran by properly setting QUANT_CONFIG environment variable. Detailed instruction on how to use that variable can be found in [Optimum Habana FP8 guide](https://github.com/huggingface/optimum-habana/tree/main/examples/text-generation#running-with-fp8). Summarising that instruction in TGI cases:
 
 1. Measure quantization statistics of requested model by using [Optimum Habana measurement script](https://github.com/huggingface/optimum-habana/tree/main/examples/text-generation#running-with-fp8:~:text=use_deepspeed%20%2D%2Dworld_size%208-,run_lm_eval.py,-%5C%0A%2Do%20acc_70b_bs1_measure.txt)
-2. Run requested model in TGI with proper QUANT_CONFIG setting - f. e. `QUANT_CONFIG=./quantization_config/maxabs_quant.json`
+2. Run requested model in TGI with proper QUANT_CONFIG setting - e.g. `QUANT_CONFIG=./quantization_config/maxabs_quant.json`
 
 > [!NOTE]
-> Only models pointed in [supported configurations](#currently-supported-configurations) are guaranteed to work with fp8
+> Only models pointed in [supported configurations](#currently-supported-configurations) are guaranteed to work with FP8
 
 Additional hints to quantize model for TGI when using `run_lm_eval.py`:
 * use `--limit_hpu_graphs` flag to save memory
@@ -116,8 +116,8 @@ Currently supported and validated configurations (other configurations are not g
 
 | Model| Cards| Decode batch size| Dtype| Max input tokens |Max total tokens|
 |:----:|:----:|:----------------:|:----:|:----------------:|:--------------:|
-| LLaMA 70b | 8     | 128 | bfloat16/fp8 | 1024 | 2048 |
-| LLaMA 7b  | 1/8   | 16  | bfloat16/fp8 | 1024 | 2048 |
+| LLaMA 70b | 8     | 128 | bfloat16/FP8 | 1024 | 2048 |
+| LLaMA 7b  | 1/8   | 16  | bfloat16/FP8 | 1024 | 2048 |
 </div>
 
 Other sequence lengths can be used with proportionally decreased/increased batch size (the higher sequence length, the lower batch size).
