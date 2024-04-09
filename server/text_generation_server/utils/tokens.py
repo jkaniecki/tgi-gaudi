@@ -206,6 +206,7 @@ class HeterogeneousNextTokenChooser:
         self.dtype = dtype
         self.device = device
 
+    @torch.compile(backend = "aot_hpu_inference_backend")
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor):
         if self.watermark_processor is not None:
             scores = self.watermark_processor(input_ids, scores)

@@ -85,7 +85,6 @@ def biggest_single_chunk(offset):
     else:
         return 0
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def grouped_pad(tensor_groups, dims, values):
     grouped_result = []
     for tensors, dim, value in zip(tensor_groups, dims, values):
@@ -101,7 +100,6 @@ def grouped_pad(tensor_groups, dims, values):
             htorch.core.mark_step()
     return grouped_result
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def roll(tensor, chunk, dim, merge_graphs):
     if dim is None:
         return tensor
@@ -111,7 +109,6 @@ def roll(tensor, chunk, dim, merge_graphs):
             htorch.core.mark_step()
     return tensor
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def grouped_roll(tensor_groups, chunk, dims, merge_graphs):
     tensor_groups = [[roll(t, chunk, dim, merge_graphs) for t in tensors] for tensors, dim in zip(tensor_groups, dims)]
     if merge_graphs:
@@ -119,14 +116,12 @@ def grouped_roll(tensor_groups, chunk, dims, merge_graphs):
             htorch.core.mark_step()
     return tensor_groups
 
-
 def grouped_shift(tensor_groups, dims, offset, merge_graphs):
     chunks = calculate_chunks(offset)
     for c in chunks:
         tensor_groups = grouped_roll(tensor_groups, c, dims, merge_graphs)
     return tensor_groups
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def move(dst_tensors, dst_indices, src_tensors):
     bs_dim = 0
     num_indices = dst_indices.size(0)
@@ -137,12 +132,10 @@ def move(dst_tensors, dst_indices, src_tensors):
     if LAZY_MODE:
         htorch.core.mark_step()
 
-
 def grouped_move(dst_tensor_groups, dst_indices, src_tensor_groups):
     for dst_tensors, src_tensors in zip(dst_tensor_groups, src_tensor_groups):
         move(dst_tensors, dst_indices, src_tensors)
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def extend_tensor(tensor, padding, dim):
     result = torch.cat([tensor, padding], dim=dim)
     if LAZY_MODE:
@@ -166,14 +159,12 @@ def grouped_extend_batch(tensor_groups, target_bs, bs_dims):
     tensor_groups = [extend_batch(tensors, target_bs, dim) for tensors, dim in zip(tensor_groups, bs_dims)]
     return tensor_groups
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def merge(tensor_group):
     tensor_group = [torch.stack(tensor_group)]
     if LAZY_MODE:
         htorch.core.mark_step()
     return tensor_group
 
-@torch.compile(backend = "aot_hpu_training_backend")
 def split(tensor_group, clone_data):
     tensor_group = [t.squeeze(0) for t in torch.split(tensor_group[0], 1)]
     if clone_data:
@@ -633,7 +624,8 @@ class CausalLM(Model):
                 from habana_frameworks.torch.hpu import wrap_in_hpu_graph
                 model = wrap_in_hpu_graph(model, disable_tensor_cache=True)
         else:
-            model = torch.compile(model, backend = "aot_hpu_training_backend")
+            model = torch.compile(model, backend = "aot_hpu_inference_backend")
+
 
         model = self.setup_quantization(model)
 
@@ -688,6 +680,10 @@ class CausalLM(Model):
         else:
             self.hb_profiler = None
         self.step = 0
+
+        #import debugpy
+        #debugpy.listen(3033)
+        #debugpy.wait_for_client()
 
     def get_deepspeed_model(
         self,
@@ -838,6 +834,8 @@ class CausalLM(Model):
         requests_to_generate = []
         # In order to pipeline any actions on CPU we perform the operation in 3 main stages:
         # Stage 1. Collect next token ids of any previously started generations
+        #import debugpy
+        #debugpy.breakpoint()
         for batch_id, batch in enumerate(batches):
             if batch.logits is not None:
                 logits = batch.logits
